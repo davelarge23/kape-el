@@ -1,8 +1,9 @@
 ﻿"use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
 
 type Product = {
@@ -47,6 +48,7 @@ function getOrderErrorMessage(message?: string) {
 }
 
 export default function HomePage() {
+  const router = useRouter();
   const [basket, setBasket] = useState<BasketItem[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -59,6 +61,8 @@ export default function HomePage() {
   const [order, setOrder] = useState<{ queue: string; reference: string; name: string; status: string } | null>(null);
   const [showBarcodePopup, setShowBarcodePopup] = useState(false);
   const [barcodeReference, setBarcodeReference] = useState<string | null>(null);
+  const [showScanConfirmation, setShowScanConfirmation] = useState(false);
+  const notifiedReference = useRef("");
 
   const totalItems = basket.reduce((sum, item) => sum + item.quantity, 0);
   const total = basket.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -173,14 +177,35 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!order?.reference) return;
+    let active = true;
+    const applyStatus = (status?: string) => {
+      if (!active || !status) return;
+      if (status === "Processing" && notifiedReference.current !== order.reference) {
+        notifiedReference.current = order.reference;
+        setShowBarcodePopup(false);
+        setShowScanConfirmation(true);
+      }
+      setOrder((current) => current ? { ...current, status } : current);
+    };
+
     const channel = supabase
       .channel(`customer-order-${order.reference}`)
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "orders", filter: `reference_number=eq.${order.reference}` }, (payload) => {
         const updated = payload.new as { status?: string };
-        setOrder((current) => current ? { ...current, status: updated.status ?? current.status } : current);
+        applyStatus(updated.status);
       })
       .subscribe();
-    return () => { void supabase.removeChannel(channel); };
+
+    const interval = window.setInterval(async () => {
+      const { data } = await supabase.from("orders").select("status").eq("reference_number", order.reference).maybeSingle();
+      applyStatus(data?.status);
+    }, 3000);
+
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      void supabase.removeChannel(channel);
+    };
   }, [order?.reference]);
 
   return (
@@ -328,6 +353,19 @@ export default function HomePage() {
             <p className="barcode-note">Keep this screen open until the code has been scanned.</p>
             <button type="button" className="secondary-button" onClick={() => setShowBarcodePopup(false)}>Cancel and edit</button>
           </div>
+        </div>
+      )}
+
+      {showScanConfirmation && (
+          <div className="overlay scan-confirmation-overlay">
+          <section className="scan-confirmation-popup" role="dialog" aria-modal="true" aria-labelledby="root-scan-confirmation-title" onClick={(event) => event.stopPropagation()}>
+              <button type="button" className="close-button" onClick={() => router.push("/")} aria-label="Close notification">×</button>
+            <div className="scan-confirmation-icon">✓</div>
+            <p className="eyebrow">Order confirmed</p>
+            <h2 id="root-scan-confirmation-title">Please wait to be called</h2>
+            <p>The staff scanned your order. It has been sent to the kitchen and will be prepared shortly.</p>
+            <button type="button" className="primary-button" onClick={() => router.push("/")}>Please wait</button>
+          </section>
         </div>
       )}
 
