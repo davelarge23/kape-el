@@ -552,7 +552,7 @@ button {
 
 .scanner-login-form {
   display: grid;
-  gap: 10px;
+  gap: 11px;
   margin-top: 24px;
 }
 
