@@ -359,12 +359,12 @@ export default function HomePage() {
       {showScanConfirmation && (
           <div className="overlay scan-confirmation-overlay">
           <section className="scan-confirmation-popup" role="dialog" aria-modal="true" aria-labelledby="root-scan-confirmation-title" onClick={(event) => event.stopPropagation()}>
-              <button type="button" className="close-button" onClick={() => router.push("/")} aria-label="Close notification">×</button>
+              <button type="button" className="scan-confirmation-close" onClick={() => router.replace("/")} aria-label="Close notification">×</button>
             <div className="scan-confirmation-icon">✓</div>
             <p className="eyebrow">Order confirmed</p>
             <h2 id="root-scan-confirmation-title">Please wait to be called</h2>
             <p>The staff scanned your order. It has been sent to the kitchen and will be prepared shortly.</p>
-            <button type="button" className="primary-button" onClick={() => router.push("/")}>Please wait</button>
+            <button type="button" className="primary-button" onClick={() => router.replace("/")}>Please wait</button>
           </section>
         </div>
       )}

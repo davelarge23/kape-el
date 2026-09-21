@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { supabase } from "../../lib/supabase";
 
 type OrderStatus = "New" | "Processing" | "Completed" | "Cancelled";
@@ -45,6 +45,8 @@ export default function ManagerPage() {
   const [loginError, setLoginError] = useState("");
   const [actionError, setActionError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [newOrderNotice, setNewOrderNotice] = useState("");
+  const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   async function loadOrders() {
     const { data, error } = await supabase.from("orders").select("*").order("created_at", { ascending: false });
@@ -71,9 +73,19 @@ export default function ManagerPage() {
   useEffect(() => {
     if (!authenticated) return;
     const channel = supabase.channel("manager-orders")
-      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => void loadOrders())
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "orders" }, (payload) => {
+        const newOrder = payload.new as { order_number?: number; customer_name?: string | null };
+        setNewOrderNotice(`New order #${newOrder.order_number ?? ""} from ${newOrder.customer_name || "Guest"}`);
+        if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+        noticeTimerRef.current = setTimeout(() => setNewOrderNotice(""), 5000);
+        void loadOrders();
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "orders" }, () => void loadOrders())
       .subscribe();
-    return () => { void supabase.removeChannel(channel); };
+    return () => {
+      if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+      void supabase.removeChannel(channel);
+    };
   }, [authenticated]);
 
   async function signIn(event: FormEvent<HTMLFormElement>) {
@@ -130,6 +142,7 @@ export default function ManagerPage() {
         <button className="manager-logout" onClick={() => void supabase.auth.signOut()}>Sign out</button>
       </header>
       {actionError && <p className="order-error manager-alert" role="alert">{actionError}</p>}
+      {newOrderNotice && <div className="manager-toast" role="status"><span className="manager-toast-dot" />{newOrderNotice}</div>}
       <div className="order-columns">
         {columns.map((column) => {
           const columnOrders = orders.filter((order) => order.status === column.status);
