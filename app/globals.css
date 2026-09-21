@@ -768,6 +768,77 @@ button {
   margin-top: 18px;
 }
 
+.scanner-status-overlay {
+  z-index: 20;
+}
+
+.scanner-status-popup {
+  animation: popup-in .22s ease-out both;
+  background: #FFFFFF;
+  border: 1px solid var(--line);
+  box-shadow: 0 24px 70px rgba(23, 38, 34, .24);
+  max-width: 370px;
+  padding: 30px 24px 24px;
+  text-align: center;
+  width: calc(100% - 36px);
+}
+
+.scanner-status-popup h2 {
+  font-size: clamp(1.8rem, 7vw, 2.5rem);
+  letter-spacing: -.06em;
+  line-height: .95;
+  margin: 0;
+}
+
+.scanner-status-popup > p:not(.eyebrow) {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 14px auto 22px;
+}
+
+.scanner-status-popup .primary-button {
+  width: 100%;
+}
+
+.scanner-status-icon {
+  align-items: center;
+  background: #dcefe0;
+  border-radius: 50%;
+  color: #318052;
+  display: flex;
+  font-size: 1.6rem;
+  font-weight: 900;
+  height: 54px;
+  justify-content: center;
+  margin: 0 auto 16px;
+  width: 54px;
+}
+
+.scanner-status-warning .scanner-status-icon {
+  background: #fff0c2;
+  color: #9a6b00;
+}
+
+.scanner-status-error .scanner-status-icon {
+  background: #f8ded7;
+  color: #8c2d20;
+}
+
+.scanner-spinner {
+  animation: scanner-spin .8s linear infinite;
+  border: 4px solid #dce9dc;
+  border-radius: 50%;
+  border-top-color: var(--accent);
+  display: block;
+  height: 54px;
+  margin: 0 auto 16px;
+  width: 54px;
+}
+
+@keyframes scanner-spin {
+  to { transform: rotate(360deg); }
+}
+
 .scanner-manual-link {
   color: var(--ink);
   display: block;

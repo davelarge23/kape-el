@@ -18,6 +18,7 @@ function getReferenceFromScan(value: string) {
 export default function ScannerPage() {
   const scannerRef = useRef<{ stop: () => Promise<void>; clear: () => void } | null>(null);
   const permissionRequestedRef = useRef(false);
+  const scanInProgressRef = useRef(false);
   const [sessionReady, setSessionReady] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const [email, setEmail] = useState("");
@@ -27,6 +28,7 @@ export default function ScannerPage() {
   const [scanState, setScanState] = useState<ScanState>("idle");
   const [reference, setReference] = useState("");
   const [message, setMessage] = useState("Tap start scanner and allow camera access.");
+  const [statusPopup, setStatusPopup] = useState<{ title: string; detail: string; tone: "success" | "warning" | "error" } | null>(null);
 
   useEffect(() => () => {
     if (scannerRef.current) void scannerRef.current.stop().catch(() => undefined);
@@ -57,16 +59,21 @@ export default function ScannerPage() {
   }
 
   async function confirmReference(nextReference: string) {
+    if (scanInProgressRef.current) return;
+    scanInProgressRef.current = true;
     const cleanReference = getReferenceFromScan(nextReference);
     if (!cleanReference) {
       setScanState("error");
       setMessage("That QR code does not contain a valid order reference.");
+      setStatusPopup({ title: "Invalid QR code", detail: "This code does not contain a valid order reference.", tone: "error" });
+      scanInProgressRef.current = false;
       return;
     }
 
     setReference(cleanReference);
     setScanState("confirming");
     setMessage("Checking order...");
+    setStatusPopup({ title: "Checking order", detail: "Please wait while we verify this QR code.", tone: "warning" });
     await stopScanner();
 
     const { data, error } = await supabase
@@ -77,19 +84,27 @@ export default function ScannerPage() {
 
     if (error) {
       setScanState("error");
-      setMessage(error.message.includes("JWT") ? "Please sign in as staff before confirming an order." : "We could not check that order. Please try again.");
+      const detail = error.message.includes("JWT") ? "Please sign in as staff before confirming an order." : "We could not check that order. Please try again.";
+      setMessage(detail);
+      setStatusPopup({ title: "Could not check order", detail, tone: "error" });
+      scanInProgressRef.current = false;
       return;
     }
 
     if (!data) {
       setScanState("error");
       setMessage("No order was found for this QR code.");
+      setStatusPopup({ title: "Order not found", detail: "No matching order was found for this QR code.", tone: "error" });
+      scanInProgressRef.current = false;
       return;
     }
 
     if (data.status !== "New") {
       setScanState("error");
-      setMessage(`This order is already marked as ${data.status}.`);
+      const detail = `This order is already marked as ${data.status}.`;
+      setMessage(detail);
+      setStatusPopup({ title: `Already ${data.status.toLowerCase()}`, detail, tone: "warning" });
+      scanInProgressRef.current = false;
       return;
     }
 
@@ -100,14 +115,19 @@ export default function ScannerPage() {
 
     if (updateError) {
       setScanState("error");
-      setMessage(updateError.message.includes("row-level security")
+      const detail = updateError.message.includes("row-level security")
         ? "Staff sign-in is required before confirming orders."
-        : "We could not confirm that order. Please try again.");
+        : "We could not confirm that order. Please try again.";
+      setMessage(detail);
+      setStatusPopup({ title: "Confirmation failed", detail, tone: "error" });
+      scanInProgressRef.current = false;
       return;
     }
 
     setScanState("success");
     setMessage("Order confirmed and sent to the kitchen.");
+    setStatusPopup({ title: "Order confirmed", detail: "The order was sent to the kitchen successfully.", tone: "success" });
+    scanInProgressRef.current = false;
   }
 
   async function startScanner() {
@@ -145,6 +165,8 @@ export default function ScannerPage() {
 
   function resetScanner() {
     setReference("");
+    setStatusPopup(null);
+    scanInProgressRef.current = false;
     setScanState("idle");
     setMessage("Tap start scanner and allow camera access.");
   }
@@ -191,6 +213,17 @@ export default function ScannerPage() {
             {(scanState === "idle" || scanState === "error") && <button type="button" className="primary-button" onClick={() => void startScanner()}>Start scanner</button>}
             {(scanState === "success" || scanState === "error") && <button type="button" className="secondary-button" onClick={resetScanner}>Scan another order</button>}
           </div>
+          {statusPopup && (
+            <div className="overlay scanner-status-overlay">
+              <section className={`scanner-status-popup scanner-status-${statusPopup.tone}`} role="dialog" aria-modal="true" aria-labelledby="scanner-status-title">
+                {scanState === "confirming" ? <span className="scanner-spinner" aria-label="Processing" /> : <span className="scanner-status-icon">{statusPopup.tone === "success" ? "✓" : "!"}</span>}
+                <p className="eyebrow">Scan result</p>
+                <h2 id="scanner-status-title">{statusPopup.title}</h2>
+                <p>{statusPopup.detail}</p>
+                <button type="button" className="primary-button" onClick={() => { setStatusPopup(null); resetScanner(); }}>Scan another order</button>
+              </section>
+            </div>
+          )}
         </section>
       </div>
     </main>
