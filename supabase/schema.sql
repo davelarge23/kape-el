@@ -4,6 +4,7 @@ create table if not exists public.orders (
   order_archive text not null,
   customer_name text,
   order_number integer not null,
+  order_type text not null default 'individual',
   status text not null default 'New',
   reference_number text not null unique,
   total numeric(10,2) default 0,

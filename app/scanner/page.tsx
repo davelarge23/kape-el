@@ -17,6 +17,7 @@ function getReferenceFromScan(value: string) {
 
 export default function ScannerPage() {
   const scannerRef = useRef<{ stop: () => Promise<void>; clear: () => void } | null>(null);
+  const permissionRequestedRef = useRef(false);
   const [sessionReady, setSessionReady] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const [email, setEmail] = useState("");
@@ -111,9 +112,17 @@ export default function ScannerPage() {
 
   async function startScanner() {
     setScanState("starting");
-    setMessage("Requesting camera access...");
+    setMessage(permissionRequestedRef.current ? "Starting camera..." : "Requesting camera access one time...");
 
     try {
+      if (navigator.permissions?.query) {
+        const permission = await navigator.permissions.query({ name: "camera" as PermissionName });
+        if (permission.state === "denied") {
+          throw new Error("camera-permission-denied");
+        }
+      }
+
+      permissionRequestedRef.current = true;
       const { Html5Qrcode } = await import("html5-qrcode");
       const scanner = new Html5Qrcode("order-qr-reader");
       scannerRef.current = scanner;
@@ -125,10 +134,12 @@ export default function ScannerPage() {
       );
       setScanState("scanning");
       setMessage("Point the phone camera at the customer QR code.");
-    } catch {
+    } catch (error) {
       scannerRef.current = null;
       setScanState("error");
-      setMessage("Camera access is blocked. Open this page over HTTPS, then allow Camera in your phone browser settings and try again.");
+      setMessage(error instanceof Error && error.message === "camera-permission-denied"
+        ? "Camera access is blocked. Open your phone browser site settings and set Camera to Allow, then reload this page."
+        : "Camera access was requested once but is unavailable. Use HTTPS and allow Camera in your phone browser settings.");
     }
   }
 
@@ -172,7 +183,7 @@ export default function ScannerPage() {
         <section className="scanner-card">
           <p className="eyebrow">Staff scanner</p>
           <h1>Scan an order</h1>
-          <p className="scanner-copy">Use the phone camera to scan the customer&apos;s order QR code and send it to the kitchen.</p>
+          <p className="scanner-copy">Camera permission is requested once. Scan the customer&apos;s QR code inside the frame to send it to the kitchen.</p>
           <div className="scanner-frame" id="order-qr-reader" aria-label="Order QR scanner" />
           <p className={`scanner-message scanner-${scanState}`} role="status">{message}</p>
           {reference && <p className="scanner-reference">{reference}</p>}

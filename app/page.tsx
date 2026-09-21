@@ -1,8 +1,8 @@
 ﻿"use client";
 
 import Image from "next/image";
-import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
+import { Soup, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
 
@@ -16,6 +16,7 @@ type Product = {
 };
 
 type BasketItem = Product & { quantity: number };
+type OrderType = "individual" | "group";
 
 const products: Product[] = [
   { id: "dalina", name: "Dalina Coffee", description: "Dalgona Coffee", category: "Drinks", price: 0, image: "/menu-assets/Dalina-Coffee.png" },
@@ -27,7 +28,6 @@ const products: Product[] = [
 ];
 
 const peso = new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" });
-const MAX_ITEMS_PER_CATEGORY = 5;
 let fallbackOrderSequence = 0;
 
 function createOrderToken() {
@@ -48,7 +48,6 @@ function getOrderErrorMessage(message?: string) {
 }
 
 export default function HomePage() {
-  const router = useRouter();
   const [basket, setBasket] = useState<BasketItem[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -63,6 +62,7 @@ export default function HomePage() {
   const [barcodeReference, setBarcodeReference] = useState<string | null>(null);
   const [showScanConfirmation, setShowScanConfirmation] = useState(false);
   const notifiedReference = useRef("");
+  const [orderType, setOrderType] = useState<OrderType | null>(null);
 
   const totalItems = basket.reduce((sum, item) => sum + item.quantity, 0);
   const total = basket.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -71,6 +71,7 @@ export default function HomePage() {
       .filter((item) => item.category === selectedProduct.category)
       .reduce((sum, item) => sum + item.quantity, 0)
     : 0;
+  const maxItemsPerCategory = orderType === "group" ? 5 : 1;
 
   function addToBasket() {
     if (!selectedProduct) return;
@@ -78,8 +79,9 @@ export default function HomePage() {
       .filter((item) => item.category === selectedProduct.category)
       .reduce((sum, item) => sum + item.quantity, 0);
 
-    if (categoryTotal + quantity > MAX_ITEMS_PER_CATEGORY) {
-      setBasketError(`Limit reached: you can order up to ${MAX_ITEMS_PER_CATEGORY} ${selectedProduct.category.toLowerCase()} items.`);
+    if (!orderType) return;
+    if (categoryTotal + quantity > maxItemsPerCategory) {
+      setBasketError(`Limit reached: ${orderType === "individual" ? "individual orders allow 1 drink and 1 bread" : "group orders allow up to 5 drinks and 5 bread items"}.`);
       return;
     }
 
@@ -105,8 +107,8 @@ export default function HomePage() {
       .filter((item) => item.category === selectedItem.category)
       .reduce((sum, item) => sum + item.quantity, 0);
 
-    if (amount > 0 && categoryTotal >= MAX_ITEMS_PER_CATEGORY) {
-      setBasketError(`Limit reached: you can order up to ${MAX_ITEMS_PER_CATEGORY} ${selectedItem.category.toLowerCase()} items.`);
+    if (amount > 0 && categoryTotal >= maxItemsPerCategory) {
+      setBasketError(`Limit reached: ${orderType === "individual" ? "individual orders allow 1 drink and 1 bread" : "group orders allow up to 5 drinks and 5 bread items"}.`);
       return;
     }
 
@@ -156,6 +158,7 @@ export default function HomePage() {
       order_number: orderNumber,
       status: "New",
       reference_number: reference,
+      order_type: orderType,
       total,
     });
 
@@ -245,6 +248,24 @@ export default function HomePage() {
         </section>
       ))}
 
+      {!orderType && (
+        <div className="overlay choice-overlay">
+          <section className="choice-modal" role="dialog" aria-modal="true" aria-labelledby="order-type-title">
+            <p className="eyebrow">Before you order</p>
+            <h2 id="order-type-title">Who are you ordering for?</h2>
+            <p className="choice-copy">Choose a limit that fits your order.</p>
+            <div className="choice-grid">
+              <button type="button" className="choice-card" onClick={() => setOrderType("individual")}>
+                <Soup aria-hidden="true" /><strong>Individual</strong><span>1 drink and 1 bread</span>
+              </button>
+              <button type="button" className="choice-card" onClick={() => setOrderType("group")}>
+                <Users aria-hidden="true" /><strong>Group</strong><span>Up to 5 drinks and 5 bread</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
       {selectedProduct && (
         <div className="overlay" onClick={() => setSelectedProduct(null)}>
           <div className="quantity-modal" onClick={(event) => event.stopPropagation()}>
@@ -253,12 +274,12 @@ export default function HomePage() {
             <p className="eyebrow">{selectedProduct.category}</p>
             <h2>{selectedProduct.name}</h2>
             <p>{selectedProduct.description}</p>
-            <p className="category-limit">{selectedProduct.category}: {selectedCategoryTotal} / {MAX_ITEMS_PER_CATEGORY} in basket</p>
+            <p className="category-limit">{selectedProduct.category}: {selectedCategoryTotal} / {maxItemsPerCategory} in basket</p>
             <span className="modal-price">{peso.format(selectedProduct.price)}</span>
             <div className="quantity-control">
               <button type="button" onClick={() => setQuantity((current) => Math.max(1, current - 1))}>−</button>
               <b>{quantity}</b>
-              <button type="button" onClick={() => setQuantity((current) => Math.min(MAX_ITEMS_PER_CATEGORY, current + 1))}>+</button>
+              <button type="button" onClick={() => setQuantity((current) => Math.min(maxItemsPerCategory, current + 1))}>+</button>
             </div>
             {basketError && <p className="order-error modal-error" role="alert">{basketError}</p>}
             <button type="button" className="primary-button" onClick={addToBasket}>Add to basket</button>
@@ -300,7 +321,11 @@ export default function HomePage() {
             <div className="basket-footer">
               <div className="basket-total"><span>Total</span><strong>{peso.format(total)}</strong></div>
               <form onSubmit={proceedToOrder}>
-                <input value={customerName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Your name" required />
+                <div className="customer-name-field">
+                  <label htmlFor="customer-name">Customer name</label>
+                  <p>Use the name the cashier will call.</p>
+                  <input id="customer-name" value={customerName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Enter your name" autoComplete="name" required />
+                </div>
                 {orderError && <p className="order-error" role="alert">{orderError}</p>}
                 <button type="submit" className="primary-button" disabled={basket.length === 0 || !customerName.trim()}>Proceed to order</button>
               </form>
@@ -359,12 +384,11 @@ export default function HomePage() {
       {showScanConfirmation && (
           <div className="overlay scan-confirmation-overlay">
           <section className="scan-confirmation-popup" role="dialog" aria-modal="true" aria-labelledby="root-scan-confirmation-title" onClick={(event) => event.stopPropagation()}>
-              <button type="button" className="scan-confirmation-close" onClick={() => router.replace("/")} aria-label="Close notification">×</button>
             <div className="scan-confirmation-icon">✓</div>
             <p className="eyebrow">Order confirmed</p>
             <h2 id="root-scan-confirmation-title">Please wait to be called</h2>
             <p>The staff scanned your order. It has been sent to the kitchen and will be prepared shortly.</p>
-            <button type="button" className="primary-button" onClick={() => router.replace("/")}>Please wait</button>
+            <button type="button" className="primary-button" onClick={() => window.location.reload()}>Complete order</button>
           </section>
         </div>
       )}

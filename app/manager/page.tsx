@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { Soup, Users } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 
 type OrderStatus = "New" | "Processing" | "Completed" | "Cancelled";
@@ -12,6 +13,7 @@ type Order = {
   reference_number: string;
   total: number | null;
   order_archive: string;
+  order_type: "individual" | "group" | null;
   created_at: string;
 };
 type ArchiveItem = { name: string; quantity: number; price: number };
@@ -47,6 +49,7 @@ export default function ManagerPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [newOrderNotice, setNewOrderNotice] = useState("");
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notificationAudioRef = useRef<HTMLAudioElement | null>(null);
 
   async function loadOrders() {
     const { data, error } = await supabase.from("orders").select("*").order("created_at", { ascending: false });
@@ -75,6 +78,11 @@ export default function ManagerPage() {
     const channel = supabase.channel("manager-orders")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "orders" }, (payload) => {
         const newOrder = payload.new as { order_number?: number; customer_name?: string | null };
+        const notificationAudio = notificationAudioRef.current;
+        if (notificationAudio) {
+          notificationAudio.currentTime = 0;
+          void notificationAudio.play().catch(() => undefined);
+        }
         setNewOrderNotice(`New order #${newOrder.order_number ?? ""} from ${newOrder.customer_name || "Guest"}`);
         if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
         noticeTimerRef.current = setTimeout(() => setNewOrderNotice(""), 5000);
@@ -82,8 +90,10 @@ export default function ManagerPage() {
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "orders" }, () => void loadOrders())
       .subscribe();
+    const refreshTimer = window.setInterval(() => void loadOrders(), 3000);
     return () => {
       if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+      window.clearInterval(refreshTimer);
       void supabase.removeChannel(channel);
     };
   }, [authenticated]);
@@ -137,6 +147,7 @@ export default function ManagerPage() {
 
   return (
     <main className="manager-page">
+      <audio ref={notificationAudioRef} preload="auto" src="/hanguots-notification.mp3" />
       <header className="manager-header">
         <div><p className="eyebrow">EVLWM WOW FACTOR</p><h1>Order board</h1></div>
         <button className="manager-logout" onClick={() => void supabase.auth.signOut()}>Sign out</button>
@@ -152,7 +163,7 @@ export default function ManagerPage() {
               <div className="manager-order-list">
                 {columnOrders.map((order) => (
                   <button className={`manager-order-card ${isFreshOrder(order.created_at) && order.status === "New" ? "fresh-order" : ""}`} key={order.id} onClick={() => setSelectedOrder(order)}>
-                    <div className="order-card-top"><strong>#{order.order_number}</strong><span>{new Date(order.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span></div>
+                    <div className="order-card-top"><strong>#{order.order_number}</strong><span className="order-type-icon" title={order.order_type === "group" ? "Group order" : "Individual order"}>{order.order_type === "group" ? <Users aria-hidden="true" /> : <Soup aria-hidden="true" />}</span><span>{new Date(order.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span></div>
                     <h3>{order.customer_name || "Guest"}</h3>
                     <p>{order.reference_number}</p>
                     <strong className="card-total">PHP {Number(order.total ?? 0).toFixed(2)}</strong>
@@ -171,6 +182,7 @@ export default function ManagerPage() {
             <p className="eyebrow">Order #{selectedOrder.order_number}</p>
             <h2>{selectedOrder.customer_name || "Guest"}</h2>
             <p className="detail-reference">{selectedOrder.reference_number}</p>
+            <p className="detail-order-type">{selectedOrder.order_type === "group" ? <Users aria-hidden="true" /> : <Soup aria-hidden="true" />} {selectedOrder.order_type === "group" ? "Group order" : "Individual order"}</p>
             <div className="detail-items">{getItems(selectedOrder).map((item) => <div key={item.name}><span>{item.quantity} × {item.name}</span><strong>PHP {Number(item.price * item.quantity).toFixed(2)}</strong></div>)}</div>
             <div className="detail-total"><span>Total</span><strong>PHP {Number(selectedOrder.total ?? 0).toFixed(2)}</strong></div>
             {selectedOrder.status === "New" && <div className="detail-actions"><button className="danger-button" onClick={() => void updateOrder("Cancelled")} disabled={isLoading}>Cancel</button><button className="primary-button" onClick={() => void updateOrder("Processing")} disabled={isLoading}>Prepare</button></div>}

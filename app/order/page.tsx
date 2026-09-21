@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { Soup, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../../lib/supabase";
 
@@ -15,6 +15,7 @@ type Product = {
 };
 
 type BasketItem = Product & { quantity: number };
+type OrderType = "individual" | "group";
 
 const products: Product[] = [
   { id: "dalina", name: "Dalina Coffee", description: "Dalgona Coffee", category: "Drinks", price: 0, image: "/menu-assets/Dalina-Coffee.png" },
@@ -84,7 +85,6 @@ function createOrderToken() {
 }
 
 export default function OrderPage() {
-  const router = useRouter();
   const [basket, setBasket] = useState<BasketItem[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -98,29 +98,39 @@ export default function OrderPage() {
   const [submitted, setSubmitted] = useState(false);
   const [showScanConfirmation, setShowScanConfirmation] = useState(false);
   const notifiedReference = useRef("");
+  const [orderType, setOrderType] = useState<OrderType | null>(null);
 
   const totalItems = basket.reduce((sum, item) => sum + item.quantity, 0);
   const total = basket.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const orderReference = order?.reference;
+  const maxItemsPerCategory = orderType === "group" ? 5 : 1;
 
   function addToBasket() {
     if (!selectedProduct) return;
-    const categoryAlreadySelected = basket.some((item) => item.category === selectedProduct.category && item.id !== selectedProduct.id);
-    const productAlreadySelected = basket.some((item) => item.id === selectedProduct.id);
-    if (categoryAlreadySelected || productAlreadySelected || quantity > 1) {
-      setBasketError(`You can only order 1 ${selectedProduct.category === "Drinks" ? "drink" : "bread item"} per order.`);
+    const categoryTotal = basket.filter((item) => item.category === selectedProduct.category).reduce((sum, item) => sum + item.quantity, 0);
+    if (!orderType) return;
+    if (categoryTotal + quantity > maxItemsPerCategory) {
+      setBasketError(`Limit reached: ${orderType === "individual" ? "individual orders allow 1 drink and 1 bread" : "group orders allow up to 5 drinks and 5 bread items"}.`);
       return;
     }
 
-    setBasket((current) => [...current, { ...selectedProduct, quantity }]);
+    setBasket((current) => {
+      const existing = current.find((item) => item.id === selectedProduct.id);
+      return existing
+        ? current.map((item) => item.id === selectedProduct.id ? { ...item, quantity: item.quantity + quantity } : item)
+        : [...current, { ...selectedProduct, quantity }];
+    });
     setSelectedProduct(null);
     setQuantity(1);
     setBasketError("");
   }
 
   function changeQuantity(id: string, amount: number) {
-    if (amount > 0) {
-      setBasketError("Only 1 drink and 1 bread item can be ordered at a time.");
+    const selectedItem = basket.find((item) => item.id === id);
+    if (!selectedItem) return;
+
+    if (amount > 0 && selectedItem && selectedItem.quantity >= maxItemsPerCategory) {
+      setBasketError(`Limit reached: ${orderType === "individual" ? "individual orders allow 1 drink and 1 bread" : "group orders allow up to 5 drinks and 5 bread items"}.`);
       return;
     }
     setBasket((current) => current.flatMap((item) => item.id === id
@@ -182,6 +192,7 @@ export default function OrderPage() {
       order_number: orderNumber,
       status: "New",
       reference_number: reference,
+      order_type: orderType,
       total,
     });
 
@@ -252,12 +263,11 @@ export default function OrderPage() {
         {showScanConfirmation && (
           <div className="overlay scan-confirmation-overlay">
             <section className="scan-confirmation-popup" role="dialog" aria-modal="true" aria-labelledby="scan-confirmation-title" onClick={(event) => event.stopPropagation()}>
-              <button type="button" className="scan-confirmation-close" onClick={() => router.replace("/")} aria-label="Close notification">×</button>
               <div className="scan-confirmation-icon">✓</div>
               <p className="eyebrow">Order confirmed</p>
               <h2 id="scan-confirmation-title">Please wait to be called</h2>
               <p>The staff scanned your order. It has been sent to the kitchen and will be prepared shortly.</p>
-              <button className="primary-button" onClick={() => router.replace("/")}>Please wait</button>
+              <button className="primary-button" onClick={() => window.location.reload()}>Complete order</button>
             </section>
           </div>
         )}
@@ -294,13 +304,15 @@ export default function OrderPage() {
         </section>
       ))}
 
+      {!orderType && <div className="overlay choice-overlay"><section className="choice-modal" role="dialog" aria-modal="true" aria-labelledby="order-type-title"><p className="eyebrow">Before you order</p><h2 id="order-type-title">Who are you ordering for?</h2><p className="choice-copy">Choose a limit that fits your order.</p><div className="choice-grid"><button type="button" className="choice-card" onClick={() => setOrderType("individual")}><Soup aria-hidden="true" /><strong>Individual</strong><span>1 drink and 1 bread</span></button><button type="button" className="choice-card" onClick={() => setOrderType("group")}><Users aria-hidden="true" /><strong>Group</strong><span>Up to 5 drinks and 5 bread</span></button></div></section></div>}
+
       {selectedProduct && <div className="overlay" onClick={() => setSelectedProduct(null)}>
         <section className="quantity-modal" role="dialog" aria-modal="true" aria-labelledby="quantity-title" onClick={(event) => event.stopPropagation()}>
           <button className="close-button" onClick={() => setSelectedProduct(null)} aria-label="Close">×</button>
           <div className="modal-image"><Image src={selectedProduct.image} alt="" fill sizes="160px" /></div>
           <p className="eyebrow">{selectedProduct.category}</p><h2 id="quantity-title">{selectedProduct.name}</h2><p>{selectedProduct.description}</p>
           <strong className="modal-price">{peso.format(selectedProduct.price * quantity)}</strong>
-          <div className="quantity-control"><button onClick={() => setQuantity(Math.max(1, quantity - 1))} aria-label="Decrease quantity">−</button><b>{quantity}</b><button onClick={() => setQuantity(Math.min(1, quantity + 1))} aria-label="Increase quantity">+</button></div>
+          <div className="quantity-control"><button onClick={() => setQuantity(Math.max(1, quantity - 1))} aria-label="Decrease quantity">−</button><b>{quantity}</b><button onClick={() => setQuantity(Math.min(maxItemsPerCategory, quantity + 1))} aria-label="Increase quantity">+</button></div>
           {basketError && <p className="order-error" role="alert">{basketError}</p>}
           <button className="primary-button" onClick={addToBasket}>Add to basket</button>
           <button className="cancel-button" onClick={() => setSelectedProduct(null)}>Cancel</button>
@@ -318,7 +330,7 @@ export default function OrderPage() {
             <div className="basket-list">{basket.map((item) => <div className="basket-item" key={item.id}><div><h4>{item.name}</h4><p>{peso.format(item.price)} each</p></div><div className="mini-quantity"><button onClick={() => changeQuantity(item.id, -1)} aria-label={`Remove one ${item.name}`}>−</button><b>{item.quantity}</b><button onClick={() => changeQuantity(item.id, 1)} aria-label={`Add one ${item.name}`}>+</button></div></div>)}</div>
             <div className="basket-total"><span>Total</span><strong>{peso.format(total)}</strong></div>
             {basketError && <p className="order-error" role="alert">{basketError}</p>}
-            {confirmOrder ? <div className="confirmation"><p>Ready to place this order for <strong>{customerName}</strong>?</p><p className="confirmation-note">Your order will be sent to the counter and cannot be edited afterward.</p>{orderError && <p className="order-error">{orderError}</p>}<button className="primary-button" onClick={placeOrder} disabled={isPlacingOrder}>{isPlacingOrder ? "Saving order..." : "Confirm and place order"}</button><button className="cancel-button" onClick={() => setConfirmOrder(false)}>Back to basket</button></div> : <form onSubmit={proceedToOrder}><label htmlFor="customer-name">What&apos;s your name?</label><input id="customer-name" value={customerName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Enter your name" required /><button className="primary-button" type="submit">Proceed to order</button></form>}
+            {confirmOrder ? <div className="confirmation"><p>Ready to place this order for <strong>{customerName}</strong>?</p><p className="confirmation-note">Your order will be sent to the counter and cannot be edited afterward.</p>{orderError && <p className="order-error">{orderError}</p>}<button className="primary-button" onClick={placeOrder} disabled={isPlacingOrder}>{isPlacingOrder ? "Saving order..." : "Confirm and place order"}</button><button className="cancel-button" onClick={() => setConfirmOrder(false)}>Back to basket</button></div> : <form onSubmit={proceedToOrder}><div className="customer-name-field"><label htmlFor="customer-name">Customer name</label><p>Use the name the cashier will call.</p><input id="customer-name" value={customerName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Enter your name" autoComplete="name" required /></div><button className="primary-button" type="submit">Proceed to order</button></form>}
           </>}
         </aside>
       </div>}
