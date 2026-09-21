@@ -1,0 +1,141 @@
+"use client";
+
+import Image from "next/image";
+import { Soup, Users } from "lucide-react";
+import { useEffect, useState } from "react";
+import { supabase } from "../../lib/supabase";
+
+type OrderType = "individual" | "group";
+type Product = { id: string; name: string; description: string; category: "Drinks" | "Bread"; price: number; image: string };
+type BasketItem = Product & { quantity: number };
+
+type Order = { queue: string; reference: string; name: string; status: string };
+
+const products: Product[] = [
+  { id: "dalina", name: "Dalina Coffee", description: "Dalgona Coffee", category: "Drinks", price: 0, image: "/menu-assets/Dalina-Coffee.png" },
+  { id: "permika", name: "Permika Latte", description: "Spanish Latte", category: "Drinks", price: 0, image: "/menu-assets/Permika-Latte.png" },
+  { id: "fruit", name: "Fruit of Knowledge Soda", description: "Green Apple Fruit Soda", category: "Drinks", price: 0, image: "/menu-assets/Fruit-Of-Knowledge-Soda.png" },
+  { id: "kofinoy", name: "KoFinoy", description: "Cafe Filipino", category: "Drinks", price: 0, image: "/menu-assets/KoFinoy.png" },
+  { id: "pankekayo", name: "Pankekayo", description: "OG Filipino Style Pancake", category: "Bread", price: 0, image: "/menu-assets/Pankekayo.png" },
+  { id: "pandasal", name: "Pandesal", description: "Classic Pandesal", category: "Bread", price: 0, image: "/menu-assets/Pandasal.png" },
+];
+
+const peso = new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" });
+let fallbackOrderSequence = 0;
+
+function createOrderToken() {
+  const values = new Uint32Array(2);
+  if (typeof globalThis.crypto?.getRandomValues === "function") {
+    globalThis.crypto.getRandomValues(values);
+    return `${values[0].toString(16)}${values[1].toString(16)}`.toUpperCase();
+  }
+  fallbackOrderSequence += 1;
+  return `ORDER${String(fallbackOrderSequence).padStart(6, "0")}`;
+}
+
+export default function KioskPage() {
+  const [orderType, setOrderType] = useState<OrderType | null>(null);
+  const [basket, setBasket] = useState<BasketItem[]>([]);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [quantity, setQuantity] = useState(1);
+  const [showBasket, setShowBasket] = useState(false);
+  const [customerName, setCustomerName] = useState("");
+  const [error, setError] = useState("");
+  const [isPlacing, setIsPlacing] = useState(false);
+  const [order, setOrder] = useState<Order | null>(null);
+
+  const maxItems = orderType === "group" ? 5 : 1;
+  const total = basket.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const totalItems = basket.reduce((sum, item) => sum + item.quantity, 0);
+
+  function addToBasket() {
+    if (!selectedProduct || !orderType) return;
+    const categoryTotal = basket.filter((item) => item.category === selectedProduct.category).reduce((sum, item) => sum + item.quantity, 0);
+    if (categoryTotal + quantity > maxItems) {
+      setError(orderType === "individual" ? "Individual orders allow 1 drink and 1 bread." : "Group orders allow up to 5 drinks and 5 bread items.");
+      return;
+    }
+    setBasket((current) => {
+      const existing = current.find((item) => item.id === selectedProduct.id);
+      return existing
+        ? current.map((item) => item.id === selectedProduct.id ? { ...item, quantity: item.quantity + quantity } : item)
+        : [...current, { ...selectedProduct, quantity }];
+    });
+    setSelectedProduct(null);
+    setQuantity(1);
+    setError("");
+  }
+
+  function changeQuantity(id: string, amount: number) {
+    const item = basket.find((entry) => entry.id === id);
+    if (!item) return;
+    const categoryTotal = basket.filter((entry) => entry.category === item.category).reduce((sum, entry) => sum + entry.quantity, 0);
+    if (amount > 0 && categoryTotal >= maxItems) {
+      setError(orderType === "individual" ? "Individual orders allow 1 drink and 1 bread." : "Group orders allow up to 5 drinks and 5 bread items.");
+      return;
+    }
+    setBasket((current) => current.flatMap((entry) => entry.id === id
+      ? entry.quantity + amount > 0 ? [{ ...entry, quantity: entry.quantity + amount }] : []
+      : [entry]));
+    setError("");
+  }
+
+  async function placeOrder() {
+    if (!orderType || !customerName.trim() || basket.length === 0) {
+      setError("Add items and enter the customer name before placing the order.");
+      return;
+    }
+    setIsPlacing(true);
+    setError("");
+    const token = createOrderToken();
+    const orderNumber = parseInt(token.slice(0, 6), 16) || 1;
+    const reference = `DK-${token.slice(0, 6)}`;
+    const { error: insertError } = await supabase.from("orders").insert({
+      order_archive: JSON.stringify({ items: basket.map(({ id, name, quantity, price }) => ({ id, name, quantity, price })), total }),
+      customer_name: customerName.trim(),
+      order_number: orderNumber,
+      order_type: orderType,
+      order_source: "kiosk",
+      status: "New",
+      reference_number: reference,
+      total,
+    });
+    if (insertError) {
+      setError("We could not place the order. Please try again.");
+      setIsPlacing(false);
+      return;
+    }
+    setOrder({ queue: `A-${String(orderNumber).padStart(6, "0")}`, reference, name: customerName.trim(), status: "New" });
+    setIsPlacing(false);
+  }
+
+  useEffect(() => {
+    if (!order?.reference) return;
+    const channel = supabase.channel(`kiosk-order-${order.reference}`)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "orders", filter: `reference_number=eq.${order.reference}` }, (payload) => {
+        const updated = payload.new as { status?: string };
+        setOrder((current) => current ? { ...current, status: updated.status ?? current.status } : current);
+      })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [order?.reference]);
+
+  if (order) {
+    return <main className="order-page status-page"><section className="status-card"><div className="status-icon">✓</div><p className="eyebrow">Order placed</p><h1>Thanks, {order.name}.</h1><p className="status-copy">Please wait to be called when your order is ready.</p><div className="order-numbers"><div><span>Queue number</span><strong>{order.queue}</strong></div><div><span>Reference</span><strong>{order.reference}</strong></div></div><div className="tracking-row"><span className="pulse-dot" /><span>{order.status === "Processing" ? "Your order is being prepared." : order.status === "Completed" ? "Your order is ready." : "Order received."}</span><b>{order.status.toUpperCase()}</b></div><button className="text-button" onClick={() => { setOrder(null); setBasket([]); setCustomerName(""); setOrderType(null); }}>Start a new order</button></section></main>;
+  }
+
+  return (
+    <main className="order-page">
+      <header className="topbar"><div className="brand-mark">DknY <span>Kape EL</span></div><div className="topbar-links"><strong>KIOSK ORDERING</strong></div></header>
+      <section className="welcome"><p className="eyebrow">Self-service kiosk</p><h1>Happy Sunday</h1><p className="welcome-copy">Choose your order type, then select your drinks and bread.</p></section>
+      <div className="menu-heading"><div><h2>Today&apos;s menu</h2><p className="ordering-note">{orderType === "group" ? "Group: up to 5 drinks and 5 bread items." : "Individual: 1 drink and 1 bread."}</p></div><span>Tap an item to order</span></div>
+      {(["Drinks", "Bread"] as const).map((category) => <section className="menu-section" key={category}><div className="section-label"><span>{category === "Drinks" ? "01" : "02"}</span><h3>{category}</h3></div><div className="product-grid">{products.filter((product) => product.category === category).map((product) => <button type="button" className="product-card" key={product.id} onClick={() => { setSelectedProduct(product); setError(""); }}><div className="product-image"><Image src={product.image} alt={product.name} fill sizes="(max-width: 700px) 109px, 160px" /></div><div className="product-info"><h4>{product.name}</h4><p>{product.description}</p><strong>{product.price === 0 ? "Free" : peso.format(product.price)}</strong></div><span className="add-icon">+</span></button>)}</div></section>)}
+
+      {!orderType && <div className="overlay choice-overlay"><section className="choice-modal" role="dialog" aria-modal="true"><p className="eyebrow">Before you order</p><h2>Who are you ordering for?</h2><p className="choice-copy">Choose a limit that fits your order.</p><div className="choice-grid"><button type="button" className="choice-card" onClick={() => setOrderType("individual")}><Soup aria-hidden="true" /><strong>Individual</strong><span>1 drink and 1 bread</span></button><button type="button" className="choice-card" onClick={() => setOrderType("group")}><Users aria-hidden="true" /><strong>Group</strong><span>Up to 5 drinks and 5 bread</span></button></div></section></div>}
+      {selectedProduct && <div className="overlay" onClick={() => setSelectedProduct(null)}><section className="quantity-modal" onClick={(event) => event.stopPropagation()}><button className="close-button" onClick={() => setSelectedProduct(null)} aria-label="Close">×</button><div className="modal-image"><Image src={selectedProduct.image} alt={selectedProduct.name} fill sizes="140px" /></div><p className="eyebrow">{selectedProduct.category}</p><h2>{selectedProduct.name}</h2><p>{selectedProduct.description}</p><div className="quantity-control"><button onClick={() => setQuantity(Math.max(1, quantity - 1))}>−</button><b>{quantity}</b><button onClick={() => setQuantity(Math.min(maxItems, quantity + 1))}>+</button></div>{error && <p className="order-error">{error}</p>}<button className="primary-button" onClick={addToBasket}>Add to basket</button></section></div>}
+      {showBasket && <div className="overlay" onClick={() => setShowBasket(false)}><aside className="basket-drawer" onClick={(event) => event.stopPropagation()}><div className="drawer-heading"><div><p className="eyebrow">Instant kiosk checkout</p><h2>Your basket</h2></div><button className="close-button" onClick={() => setShowBasket(false)} aria-label="Close basket">×</button></div><div className="basket-list">{basket.map((item) => <div className="basket-item" key={item.id}><div><h4>{item.name}</h4><p>{item.quantity} × {peso.format(item.price)}</p></div><div className="mini-quantity"><button onClick={() => changeQuantity(item.id, -1)}>−</button><b>{item.quantity}</b><button onClick={() => changeQuantity(item.id, 1)}>+</button></div></div>)}</div><div className="basket-total"><span>Total</span><strong>{peso.format(total)}</strong></div><div className="customer-name-field"><label htmlFor="kiosk-customer-name">Customer name</label><p>Use the name the cashier will call.</p><input id="kiosk-customer-name" value={customerName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Enter your name" autoComplete="name" /></div>{error && <p className="order-error">{error}</p>}<button type="button" className="primary-button" onClick={() => void placeOrder()} disabled={isPlacing}>{isPlacing ? "Placing order..." : "Place order now"}</button></aside></div>}
+      {error && !selectedProduct && !showBasket && <p className="order-error kiosk-error">{error}</p>}
+      <button type="button" className="basket-dock" onClick={() => setShowBasket(true)} disabled={basket.length === 0}><span>{totalItems} item{totalItems === 1 ? "" : "s"} in basket</span><strong>Review basket →</strong></button>
+    </main>
+  );
+}

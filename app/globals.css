@@ -629,14 +629,18 @@ button {
 }
 
 .order-type-icon,
-.detail-order-type {
+.detail-order-type,
+.order-source-icon,
+.detail-order-source {
   align-items: center;
   display: inline-flex;
   gap: 5px;
 }
 
 .order-type-icon svg,
-.detail-order-type svg {
+.detail-order-type svg,
+.order-source-icon svg,
+.detail-order-source svg {
   color: var(--accent);
   height: 17px;
   width: 17px;
@@ -647,6 +651,13 @@ button {
   font-size: .82rem;
   font-weight: 700;
   margin: 12px 0 0;
+}
+
+.detail-order-source {
+  color: var(--muted);
+  font-size: .82rem;
+  font-weight: 700;
+  margin: 7px 0 0;
 }
 
 .scanner-login-form {
@@ -798,6 +809,91 @@ button {
 
 .scanner-status-popup .primary-button {
   width: 100%;
+}
+
+.status-page {
+  align-items: center;
+  background: radial-gradient(circle at 80% 8%, #e4eee0 0, transparent 30%), var(--background);
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 28px 18px;
+}
+
+.status-card {
+  background: #FFFFFF;
+  border: 1px solid var(--line);
+  box-shadow: 0 24px 70px rgba(23, 38, 34, .14);
+  max-width: 560px;
+  padding: clamp(28px, 7vw, 56px);
+  text-align: center;
+  width: 100%;
+}
+
+.status-card h1 {
+  font-size: clamp(2.4rem, 8vw, 4.8rem);
+  letter-spacing: -.08em;
+  line-height: .92;
+  margin: 0;
+}
+
+.status-icon {
+  align-items: center;
+  background: #dcefe0;
+  border-radius: 50%;
+  color: #318052;
+  display: flex;
+  font-size: 2rem;
+  font-weight: 900;
+  height: 64px;
+  justify-content: center;
+  margin: 0 auto 20px;
+  width: 64px;
+}
+
+.status-copy {
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 16px auto 24px;
+}
+
+.order-numbers {
+  border-block: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  margin: 24px 0;
+  padding: 18px 0;
+}
+
+.order-numbers div + div {
+  border-left: 1px solid var(--line);
+}
+
+.order-numbers span {
+  color: var(--muted);
+  display: block;
+  font-size: .7rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.order-numbers strong {
+  display: block;
+  font-size: 1.45rem;
+  margin-top: 7px;
+}
+
+.status-page .tracking-row {
+  text-align: left;
+}
+
+.status-page .text-button {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  margin-top: 20px;
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 
 .scanner-status-icon {
@@ -1109,7 +1205,7 @@ button {
 .manager-header,
 .order-columns {
   margin-inline: auto;
-  max-width: 1080px;
+  max-width: 100%;
 }
 
 .track-header {
@@ -1272,6 +1368,21 @@ button {
   padding: 10px 14px;
 }
 
+.manager-header-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.sound-button {
+  background: #e4f5e8;
+  border: 1px solid #43a86b;
+  color: #276d43;
+  font-size: .78rem;
+  font-weight: 800;
+  padding: 10px 12px;
+}
+
 .manager-alert {
   margin: 24px auto;
   max-width: 1080px;
@@ -1411,6 +1522,24 @@ button {
 .manager-order-card h3,
 .manager-order-card p {
   margin: 8px 0 0;
+}
+
+.manager-order-card h3 {
+  font-size: 1.25rem;
+  line-height: 1.05;
+}
+
+.manager-card-items {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  padding-top: 10px;
+}
+
+.manager-card-items span {
+  color: var(--muted);
+  font-size: .8rem;
 }
 
 .card-total {

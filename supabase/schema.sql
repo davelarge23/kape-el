@@ -5,6 +5,7 @@ create table if not exists public.orders (
   customer_name text,
   order_number integer not null,
   order_type text not null default 'individual',
+  order_source text not null default 'mobile',
   status text not null default 'New',
   reference_number text not null unique,
   total numeric(10,2) default 0,
@@ -13,6 +14,9 @@ create table if not exists public.orders (
   constraint orders_status_check
     check (status in ('New', 'Processing', 'Completed', 'Cancelled'))
 );
+
+alter table public.orders
+  add column if not exists order_source text not null default 'mobile';
 
 alter table public.orders enable row level security;
 

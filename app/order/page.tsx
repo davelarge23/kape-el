@@ -193,6 +193,7 @@ export default function OrderPage() {
       status: "New",
       reference_number: reference,
       order_type: orderType,
+      order_source: "mobile",
       total,
     });
 
