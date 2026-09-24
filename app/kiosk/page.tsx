@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import { Soup, Users } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { OrderIntro } from "../components/order-intro";
 import { supabase } from "../../lib/supabase";
@@ -33,7 +32,7 @@ const products: Product[] = [
   {
     id: "dalina",
     name: "Dalina Coffee",
-    description: "Dalgona Coffee",
+    description: "Dalgona Coffee in a rush",
     category: "Drinks",
     price: 0,
     image: "/menu-assets/Dalina-Coffee.png",
@@ -41,7 +40,7 @@ const products: Product[] = [
   {
     id: "permika",
     name: "Permika Latte",
-    description: "Spanish Latte",
+    description: "Spanish Latte with a splash of time",
     category: "Drinks",
     price: 0,
     image: "/menu-assets/Permika-Latte.png",
@@ -49,7 +48,7 @@ const products: Product[] = [
   {
     id: "fruit",
     name: "Fruit of Knowledge Soda",
-    description: "Green Apple Fruit Soda",
+    description: "Knowledge-glazed Green Apple-flavored Fruit Soda",
     category: "Drinks",
     price: 0,
     image: "/menu-assets/Fruit-Of-Knowledge-Soda.png",
@@ -57,7 +56,7 @@ const products: Product[] = [
   {
     id: "kofinoy",
     name: "KoFinoy",
-    description: "Cafe Filipino",
+    description: "Kapeng Barako para sa kapatid ko kay Kristo",
     category: "Drinks",
     price: 0,
     image: "/menu-assets/KoFinoy.png",
@@ -65,7 +64,7 @@ const products: Product[] = [
   {
     id: "pankekayo",
     name: "Pankekayo",
-    description: "OG Filipino Style Pancake",
+    description: "OG Filipino Style Pancake. Okeh kaayoh!",
     category: "Bread",
     price: 0,
     image: "/menu-assets/Pankekayo.png",
@@ -73,7 +72,7 @@ const products: Product[] = [
   {
     id: "pandasal",
     name: "Pandasal",
-    description: "Classic Pandesal",
+    description: "Classic Pandesal with prayers of blessings",
     category: "Bread",
     price: 0,
     image: "/menu-assets/Pandasal.png",
@@ -114,7 +113,6 @@ function createOrderToken() {
 }
 
 export default function KioskPage() {
-  const router = useRouter();
   const [orderType, setOrderType] = useState<OrderType | null>(null);
   const [basket, setBasket] = useState<BasketItem[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -127,8 +125,13 @@ export default function KioskPage() {
   const [isPlacing, setIsPlacing] = useState(false);
   const [order, setOrder] = useState<Order | null>(null);
 
-  // NEW: Countdown state
-  const [redirectCountdown, setRedirectCountdown] = useState(7);
+  // Countdown state
+  const [redirectCountdown, setRedirectCountdown] = useState(10);
+
+  // Kiosk password protection
+  const [isKioskUnlocked, setIsKioskUnlocked] = useState(false);
+  const [kioskPassword, setKioskPassword] = useState("");
+  const [kioskPasswordError, setKioskPasswordError] = useState("");
 
   const maxItems = orderType === "group" ? 5 : 1;
 
@@ -141,6 +144,18 @@ export default function KioskPage() {
     (sum, item) => sum + item.quantity,
     0
   );
+
+  function unlockKiosk() {
+    if (kioskPassword === "toGodbetheglory") {
+      sessionStorage.setItem("kiosk-unlocked", "true");
+      setIsKioskUnlocked(true);
+      setKioskPassword("");
+      setKioskPasswordError("");
+      return;
+    }
+
+    setKioskPasswordError("Incorrect kiosk password.");
+  }
 
   function addToBasket() {
     if (!selectedProduct || !orderType) return;
@@ -280,6 +295,15 @@ export default function KioskPage() {
     setIsPlacing(false);
   }
 
+  // Check whether this browser session has already unlocked the kiosk
+  useEffect(() => {
+    const unlocked = sessionStorage.getItem("kiosk-unlocked");
+
+    if (unlocked === "true") {
+      setIsKioskUnlocked(true);
+    }
+  }, []);
+
   // Existing Supabase realtime order status listener
   useEffect(() => {
     if (!order?.reference) return;
@@ -314,17 +338,26 @@ export default function KioskPage() {
     };
   }, [order?.reference]);
 
-  // NEW: 10-second automatic redirect
+  // 7-second automatic reset after an order is placed
   useEffect(() => {
     if (!order) return;
+
+    setRedirectCountdown(10);
 
     const timer = setInterval(() => {
       setRedirectCountdown((current) => {
         if (current <= 1) {
           clearInterval(timer);
 
-          // Redirect back to kiosk
-          router.push("/kiosk");
+          // Reset the kiosk for the next customer.
+          setOrder(null);
+          setBasket([]);
+          setCustomerName("");
+          setOrderType(null);
+          setSelectedProduct(null);
+          setQuantity(1);
+          setError("");
+          setRedirectCountdown(10);
 
           return 0;
         }
@@ -334,7 +367,57 @@ export default function KioskPage() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [order, router]);
+  }, [order]);
+
+  // Kiosk password screen
+  if (!isKioskUnlocked) {
+    return (
+      <main className="order-page kiosk-lock-page">
+        <section className="kiosk-lock-card">
+          <div className="status-icon">🔒</div>
+
+          <p className="eyebrow">DKnY Kape EL</p>
+
+          <h1>Kiosk Access</h1>
+
+          <p className="status-copy">
+            Enter the kiosk password to continue.
+          </p>
+
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              unlockKiosk();
+            }}
+          >
+            <input
+              type="password"
+              value={kioskPassword}
+              onChange={(event) => {
+                setKioskPassword(event.target.value);
+                setKioskPasswordError("");
+              }}
+              placeholder="Enter kiosk password"
+              autoFocus
+              autoComplete="off"
+            />
+
+            {kioskPasswordError && (
+              <p className="order-error">{kioskPasswordError}</p>
+            )}
+
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={!kioskPassword}
+            >
+              Unlock Kiosk
+            </button>
+          </form>
+        </section>
+      </main>
+    );
+  }
 
   // Order confirmation screen
   if (order) {
@@ -363,7 +446,8 @@ export default function KioskPage() {
             </div>
           </div>
 
-          <div className="tracking-row">
+          <div className="tracking-row" >
+            <center>
             <span className="pulse-dot" />
 
             <span>
@@ -375,6 +459,7 @@ export default function KioskPage() {
             </span>
 
             <b>{order.status.toUpperCase()}</b>
+            </center>
           </div>
 
           {/* NEW: Redirect countdown */}
@@ -391,7 +476,7 @@ export default function KioskPage() {
           <button
             className="primary-button m-top-20"
             onClick={() => {
-              setRedirectCountdown(7);
+              setRedirectCountdown(10);
               setOrder(null);
               setBasket([]);
               setCustomerName("");

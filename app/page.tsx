@@ -20,12 +20,12 @@ type BasketItem = Product & { quantity: number };
 type OrderType = "individual" | "group";
 
 const products: Product[] = [
-  { id: "dalina", name: "Dalina Coffee", description: "Dalgona Coffee", category: "Drinks", price: 0, image: "/menu-assets/Dalina-Coffee.png" },
-  { id: "permika", name: "Permika Latte", description: "Spanish Latte", category: "Drinks", price: 0, image: "/menu-assets/Permika-Latte.png" },
-  { id: "fruit", name: "Fruit of Knowledge Soda", description: "Green Apple Fruit Soda", category: "Drinks", price: 0, image: "/menu-assets/Fruit-Of-Knowledge-Soda.png" },
-  { id: "kofinoy", name: "KoFinoy", description: "Cafe Filipino", category: "Drinks", price: 0, image: "/menu-assets/KoFinoy.png" },
-  { id: "pankekayo", name: "Pankekayo", description: "OG Filipino Style Pancake", category: "Bread", price: 0, image: "/menu-assets/Pankekayo.png" },
-  { id: "pandasal", name: "Pandasal", description: "Classic Pandasal", category: "Bread", price: 0, image: "/menu-assets/Pandasal.png" },
+  { id: "dalina", name: "Dalina Coffee", description: "Dalgona Coffee in a rush", category: "Drinks", price: 0, image: "/menu-assets/Dalina-Coffee.png" },
+  { id: "permika", name: "Permika Latte", description: "Spanish Latte with a splash of time", category: "Drinks", price: 0, image: "/menu-assets/Permika-Latte.png" },
+  { id: "fruit", name: "Fruit of Knowledge Soda", description: "Knowledge-glazed Green Apple-flavored Fruit Soda", category: "Drinks", price: 0, image: "/menu-assets/Fruit-Of-Knowledge-Soda.png" },
+  { id: "kofinoy", name: "KoFinoy", description: "Kapeng Barako para sa kapatid ko kay Kristo", category: "Drinks", price: 0, image: "/menu-assets/KoFinoy.png" },
+  { id: "pankekayo", name: "Pankekayo", description: "OG Filipino Style Pancake. Okeh kaayoh!", category: "Bread", price: 0, image: "/menu-assets/Pankekayo.png" },
+  { id: "pandasal", name: "Pandasal", description: "Classic Pandesal with prayers of blessings", category: "Bread", price: 0, image: "/menu-assets/Pandasal.png" },
 ];
 
 const peso = new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" });
