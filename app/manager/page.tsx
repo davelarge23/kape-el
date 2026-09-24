@@ -182,7 +182,7 @@ export default function ManagerPage() {
       <main className="manager-page login-page">
         <audio ref={notificationAudioRef} preload="auto" src="/hanguots-notification.mp3" />
         <div className="manager-login">
-          <div className="brand-mark">DknY <span>Kape EL</span></div>
+          <div className="brand-mark">DKnY <span>Kape EL</span></div>
           <p className="eyebrow">Manager access</p>
           <h1>Order board</h1>
           <p className="manager-copy">Sign in to receive and process customer orders.</p>

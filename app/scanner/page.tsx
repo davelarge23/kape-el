@@ -190,7 +190,7 @@ export default function ScannerPage() {
     return (
       <main className="scanner-page">
         <div className="scanner-shell">
-          <Link className="brand-mark" href="/">DknY <span>Kape EL</span></Link>
+          <Link className="brand-mark" href="/">DKnY <span>Kape EL</span></Link>
           <section className="scanner-card scanner-login">
             <p className="eyebrow">Staff scanner</p>
             <h1>Staff sign in</h1>
@@ -212,7 +212,7 @@ export default function ScannerPage() {
   return (
     <main className="scanner-page">
       <div className="scanner-shell">
-        <Link className="brand-mark" href="/">DknY <span>Kape EL</span></Link>
+        <Link className="brand-mark" href="/">DKnY <span>Kape EL</span></Link>
         <section className="scanner-card">
           <p className="eyebrow">Staff scanner</p>
           <h1>Scan an order</h1>

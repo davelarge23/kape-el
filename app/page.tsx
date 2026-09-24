@@ -4,6 +4,7 @@ import Image from "next/image";
 import { QRCodeSVG } from "qrcode.react";
 import { Soup, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { OrderIntro } from "./components/order-intro";
 import { supabase } from "../lib/supabase";
 
 type Product = {
@@ -231,13 +232,15 @@ export default function HomePage() {
 
   return (
     <main className="order-page">
+      <OrderIntro />
       <header className="topbar">
-        <div className="brand-mark">DknY <span>Kape EL</span></div>
-        <div className="topbar-links"><strong>EVLWM WOW FACTOR</strong></div>
+        <div className="brand-mark">DKnY <span>Kape EL</span></div>
+        <div className="topbar-links"><a className="board-link" href="/orders">Check order status</a></div>
       </header>
 
       <section className="welcome">
-        <p className="eyebrow">WOW FACTOR: Order Kiosk</p>
+        <p className="eyebrow welcome-brand">EVLWM WOW FACTOR</p>
+        <p className="eyebrow">Order Kiosk</p>
         <h1>Happy Sunday</h1>
         <p className="welcome-copy">Start your morning with our delicious offerings!</p>
       </section>
@@ -278,6 +281,7 @@ export default function HomePage() {
                 <Users aria-hidden="true" /><strong>Group</strong><span>Up to 5 drinks and 5 bread</span>
               </button>
             </div>
+            <a className="choice-status-link" href="/orders">Check order status</a>
           </section>
         </div>
       )}

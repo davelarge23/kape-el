@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "DknY Kape EL | Order ahead",
-  description: "Browse the DknY Kape EL menu and place your order.",
+  title: "DKnY Kape EL | Order ahead",
+  description: "Browse the DKnY Kape EL menu and place your order.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

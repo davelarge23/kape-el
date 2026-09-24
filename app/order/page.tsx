@@ -42,13 +42,13 @@ function getNow() {
 
 function isSessionCoolingDown() {
   if (typeof window === "undefined") return false;
-  const lastOrderAt = Number(window.localStorage.getItem("dkny-last-order-at") ?? "0");
+  const lastOrderAt = Number(window.localStorage.getItem("DKnY-last-order-at") ?? "0");
   return getNow() - lastOrderAt < ORDER_COOLDOWN_MS;
 }
 
 function markSessionAsOrdered() {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem("dkny-last-order-at", String(getNow()));
+  window.localStorage.setItem("DKnY-last-order-at", String(getNow()));
 }
 
 function createSessionId() {
@@ -65,7 +65,7 @@ function getOrCreateSessionId() {
 
   const params = new URLSearchParams(window.location.search);
   const qrSession = params.get("session");
-  const key = "dkny-session-id";
+  const key = "DKnY-session-id";
 
   if (qrSession) {
     window.localStorage.setItem(key, qrSession);
@@ -287,7 +287,7 @@ export default function OrderPage() {
   if (submitted && order) {
     return (
       <main className="order-page status-page">
-        <div className="brand-mark">DknY <span>Kape EL</span></div>
+        <div className="brand-mark">DKnY <span>Kape EL</span></div>
         <section className="status-card" id="order-status" aria-live="polite">
           <div className="status-icon">✓</div>
           <p className="eyebrow">Order received</p>
@@ -336,12 +336,13 @@ export default function OrderPage() {
   return (
     <main className="order-page">
       <header className="topbar">
-        <div className="brand-mark">DknY <span>Kape EL</span></div>
-        <div className="topbar-links"><strong>EVLWM WOW FACTOR</strong></div>
+        <div className="brand-mark">DKnY <span>Kape EL</span></div>
+        <div className="topbar-links"><a className="board-link" href="/orders">Check order status</a></div>
       </header>
 
       <section className="welcome">
-        <p className="eyebrow">WOW FACTOR: Order Kiosk</p>
+        <p className="eyebrow welcome-brand">EVLWM WOW FACTOR</p>
+        <p className="eyebrow">Order Kiosk</p>
         <h1>Happy Sunday</h1>
         <p className="welcome-copy">Start your morning with our delicious offerings!</p>
       </section>
