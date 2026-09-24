@@ -4,7 +4,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Monitor, Smartphone, Soup, Users } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 
-type OrderStatus = "New" | "Processing" | "Completed" | "Cancelled";
+type OrderStatus = "New" | "For Confirmation" | "Confirmed" | "Processing" | "Completed" | "Cancelled" | "Expired";
 type Order = {
   id: number;
   customer_name: string | null;
@@ -15,9 +15,13 @@ type Order = {
   order_archive: string;
   order_type: "individual" | "group" | null;
   order_source: "mobile" | "kiosk" | null;
+  confirmed_by: string | null;
   created_at: string;
 };
 type ArchiveItem = { name: string; quantity: number; price: number };
+
+const CONFIRMATION_EXPIRY_MS = 7 * 60 * 1000;
+const EXPIRY_CHECK_MS = 60_000;
 
 const columns: { status: OrderStatus; label: string; note: string }[] = [
   { status: "New", label: "New Orders", note: "Waiting to be prepared" },
@@ -32,6 +36,16 @@ function getItems(order: Order): ArchiveItem[] {
   } catch {
     return [];
   }
+}
+
+function getConfirmationBadge(order: Order) {
+  if (order.status === "Expired") return { label: "Expired", className: "confirmation-badge-expired" };
+  if (order.status === "For Confirmation") return { label: "For Confirmation", className: "confirmation-badge-pending" };
+  if (order.confirmed_by) return { label: "Confirmed", className: "confirmation-badge-confirmed" };
+  if (order.status === "New") return { label: "New", className: "confirmation-badge-new" };
+  const ageMs = Date.now() - new Date(order.created_at).getTime();
+  if (ageMs >= CONFIRMATION_EXPIRY_MS) return { label: "Expired", className: "confirmation-badge-expired" };
+  return { label: "For Confirmation", className: "confirmation-badge-pending" };
 }
 
 function isFreshOrder(createdAt: string) {
@@ -53,6 +67,16 @@ export default function ManagerPage() {
   const notificationAudioRef = useRef<HTMLAudioElement | null>(null);
   const knownOrderIdsRef = useRef<Set<number> | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(false);
+  const [showExpired, setShowExpired] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
+
+  const expirePendingOrders = useCallback(async () => {
+    const cutoff = new Date(Date.now() - CONFIRMATION_EXPIRY_MS).toISOString();
+    await supabase.from("orders")
+      .update({ status: "Expired", updated_at: new Date().toISOString() })
+      .eq("status", "For Confirmation")
+      .lt("created_at", cutoff);
+  }, []);
 
   const announceNewOrder = useCallback((order: { order_number?: number; customer_name?: string | null }) => {
     const notificationAudio = notificationAudioRef.current;
@@ -96,6 +120,7 @@ export default function ManagerPage() {
 
   useEffect(() => {
     if (!authenticated) return;
+    void expirePendingOrders();
     const channel = supabase.channel("manager-orders")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "orders" }, (payload) => {
         const newOrder = payload.new as { order_number?: number; customer_name?: string | null };
@@ -105,12 +130,14 @@ export default function ManagerPage() {
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "orders" }, () => void loadOrders())
       .subscribe();
     const refreshTimer = window.setInterval(() => void loadOrders(), 3000);
+    const expiryTimer = window.setInterval(() => { void expirePendingOrders(); void loadOrders(); }, EXPIRY_CHECK_MS);
     return () => {
       if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
       window.clearInterval(refreshTimer);
+      window.clearInterval(expiryTimer);
       void supabase.removeChannel(channel);
     };
-  }, [authenticated, announceNewOrder, loadOrders]);
+  }, [authenticated, announceNewOrder, expirePendingOrders, loadOrders]);
 
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -179,32 +206,47 @@ export default function ManagerPage() {
         <div><p className="eyebrow">EVLWM WOW FACTOR</p><h1>Order board</h1></div>
         <div className="manager-header-actions">
           {!soundEnabled && <button className="sound-button" onClick={() => void enableNotificationSound()}>Enable sound</button>}
-          <button className="manager-logout" onClick={() => void supabase.auth.signOut()}>Sign out</button>
+          <button type="button" className="expired-toggle" onClick={() => setShowExpired(true)}>Show expired orders</button>
+          <button className="manager-logout" onClick={() => setConfirmLogout(true)}>Sign out</button>
         </div>
       </header>
       {actionError && <p className="order-error manager-alert" role="alert">{actionError}</p>}
       {newOrderNotice && <div className="manager-toast" role="status"><span className="manager-toast-dot" />{newOrderNotice}</div>}
       <div className="order-columns">
         {columns.map((column) => {
-          const columnOrders = orders.filter((order) => order.status === column.status);
+          const columnOrders = orders.filter((order) => column.status === "New"
+            ? order.status === "New" || order.status === "For Confirmation" || order.status === "Confirmed"
+            : order.status === column.status);
           return (
             <section className={`order-column order-column-${column.status.toLowerCase()}`} key={column.status}>
               <div className="column-heading"><div><h2>{column.label}</h2><p>{column.note}</p></div><b>{columnOrders.length}</b></div>
               <div className="manager-order-list">
-                {columnOrders.map((order) => (
+                {columnOrders.map((order) => {
+                  const confirmationBadge = column.status === "New" ? getConfirmationBadge(order) : null;
+                  return (
                   <button className={`manager-order-card ${isFreshOrder(order.created_at) && order.status === "New" ? "fresh-order" : ""}`} key={order.id} onClick={() => setSelectedOrder(order)}>
-                    <div className="order-card-top"><strong>#{order.order_number}</strong><span className="order-type-icon" title={order.order_type === "group" ? "Group order" : "Individual order"}>{order.order_type === "group" ? <Users aria-hidden="true" /> : <Soup aria-hidden="true" />}</span><span className="order-source-icon" title={order.order_source === "kiosk" ? "Kiosk order" : "Mobile order"}>{order.order_source === "kiosk" ? <Monitor aria-hidden="true" /> : <Smartphone aria-hidden="true" />}</span><span>{new Date(order.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span></div>
+                    <div className="order-card-top">
+                      <strong className="order-card-id">#{order.order_number}</strong>
+                      <span>{new Date(order.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
+                    </div>
+                    {confirmationBadge && <span className={`confirmation-badge ${confirmationBadge.className}`}>{confirmationBadge.label}</span>}
                     <h3>{order.customer_name || "Guest"}</h3>
                     <div className="manager-card-items">{getItems(order).map((item) => <span key={item.name}>{item.quantity} × {item.name}</span>)}</div>
-                    <strong className="card-total">PHP {Number(order.total ?? 0).toFixed(2)}</strong>
+                    <div className="badge-row">
+                      <span className={`badge-pill ${order.order_type === "group" ? "badge-group" : "badge-individual"}`}>{order.order_type === "group" ? <Users aria-hidden="true" /> : <Soup aria-hidden="true" />}{order.order_type === "group" ? "Group" : "Individual"}</span>
+                      <span className={`badge-pill ${order.order_source === "kiosk" ? "badge-kiosk" : "badge-mobile"}`}>{order.order_source === "kiosk" ? <Monitor aria-hidden="true" /> : <Smartphone aria-hidden="true" />}{order.order_source === "kiosk" ? "Kiosk" : "Mobile"}</span>
+                    </div>
                   </button>
-                ))}
+                  );
+                })}
                 {columnOrders.length === 0 && <p className="column-empty">No orders here yet.</p>}
               </div>
             </section>
           );
         })}
       </div>
+      {showExpired && <div className="overlay" onClick={() => setShowExpired(false)}><section className="expired-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}><div className="drawer-heading"><div><p className="eyebrow">Order history</p><h2>Expired orders</h2></div><button className="close-button" onClick={() => setShowExpired(false)} aria-label="Close expired orders">×</button></div><div className="expired-list">{orders.filter((order) => order.status === "Expired").map((order) => <button className="manager-order-card" key={order.id} onClick={() => { setSelectedOrder(order); setShowExpired(false); }}><div className="order-card-top"><strong className="order-card-id">#{order.order_number}</strong><span>{new Date(order.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span></div><span className="confirmation-badge confirmation-badge-expired">Expired</span><h3>{order.customer_name || "Guest"}</h3><div className="manager-card-items">{getItems(order).map((item) => <span key={item.name}>{item.quantity} × {item.name}</span>)}</div></button>)}{orders.filter((order) => order.status === "Expired").length === 0 && <p className="column-empty">No expired orders.</p>}</div></section></div>}
+      {confirmLogout && <div className="overlay" onClick={() => setConfirmLogout(false)}><section className="logout-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}><p className="eyebrow">Manager session</p><h2>Sign out?</h2><p>Are you sure you want to leave the order board?</p><div className="button-row"><button className="secondary-button" onClick={() => setConfirmLogout(false)}>Stay signed in</button><button className="danger-button" onClick={() => void supabase.auth.signOut()}>Sign out</button></div></section></div>}
       {selectedOrder && (
         <div className="overlay" onClick={() => setSelectedOrder(null)}>
           <section className="manager-detail" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
@@ -212,11 +254,15 @@ export default function ManagerPage() {
             <p className="eyebrow">Order #{selectedOrder.order_number}</p>
             <h2>{selectedOrder.customer_name || "Guest"}</h2>
             <p className="detail-reference">{selectedOrder.reference_number}</p>
-            <p className="detail-order-type">{selectedOrder.order_type === "group" ? <Users aria-hidden="true" /> : <Soup aria-hidden="true" />} {selectedOrder.order_type === "group" ? "Group order" : "Individual order"}</p>
-            <p className="detail-order-source">{selectedOrder.order_source === "kiosk" ? <Monitor aria-hidden="true" /> : <Smartphone aria-hidden="true" />} {selectedOrder.order_source === "kiosk" ? "Kiosk order" : "Mobile order"}</p>
+            <div className="badge-row">
+              <span className={`badge-pill ${selectedOrder.order_type === "group" ? "badge-group" : "badge-individual"}`}>{selectedOrder.order_type === "group" ? <Users aria-hidden="true" /> : <Soup aria-hidden="true" />}{selectedOrder.order_type === "group" ? "Group" : "Individual"}</span>
+              <span className={`badge-pill ${selectedOrder.order_source === "kiosk" ? "badge-kiosk" : "badge-mobile"}`}>{selectedOrder.order_source === "kiosk" ? <Monitor aria-hidden="true" /> : <Smartphone aria-hidden="true" />}{selectedOrder.order_source === "kiosk" ? "Kiosk" : "Mobile"}</span>
+            </div>
+            {(selectedOrder.status === "New" || selectedOrder.status === "Confirmed") && (() => { const badge = getConfirmationBadge(selectedOrder); return <span className={`confirmation-badge ${badge.className}`}>{badge.label}</span>; })()}
+            {selectedOrder.confirmed_by && <p className="detail-confirmed-by">Confirmed by {selectedOrder.confirmed_by}</p>}
             <div className="detail-items">{getItems(selectedOrder).map((item) => <div key={item.name}><span>{item.quantity} × {item.name}</span><strong>PHP {Number(item.price * item.quantity).toFixed(2)}</strong></div>)}</div>
             <div className="detail-total"><span>Total</span><strong>PHP {Number(selectedOrder.total ?? 0).toFixed(2)}</strong></div>
-            {selectedOrder.status === "New" && <div className="detail-actions"><button className="danger-button" onClick={() => void updateOrder("Cancelled")} disabled={isLoading}>Cancel</button><button className="primary-button" onClick={() => void updateOrder("Processing")} disabled={isLoading}>Prepare</button></div>}
+            {(selectedOrder.status === "New" || selectedOrder.status === "Confirmed") && <div className="detail-actions"><button className="danger-button" onClick={() => void updateOrder("Cancelled")} disabled={isLoading}>Cancel</button><button className="primary-button" onClick={() => void updateOrder("Processing")} disabled={isLoading}>Prepare</button></div>}
             {selectedOrder.status === "Processing" && <button className="primary-button" onClick={() => void updateOrder("Completed")} disabled={isLoading}>{isLoading ? "Updating..." : "Complete & Notify"}</button>}
             {selectedOrder.status === "Completed" && <p className="completed-note">Completed and customer notified.</p>}
             {selectedOrder.status === "Cancelled" && <p className="cancelled-note">This order is in the cancelled tab.</p>}

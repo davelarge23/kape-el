@@ -6,17 +6,25 @@ create table if not exists public.orders (
   order_number integer not null,
   order_type text not null default 'individual',
   order_source text not null default 'mobile',
+  confirmed_by text,
   status text not null default 'New',
   reference_number text not null unique,
   total numeric(10,2) default 0,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  constraint orders_status_check
-    check (status in ('New', 'Processing', 'Completed', 'Cancelled'))
+  updated_at timestamptz not null default now()
 );
 
 alter table public.orders
+  add column if not exists order_type text not null default 'individual';
+
+alter table public.orders
   add column if not exists order_source text not null default 'mobile';
+
+alter table public.orders
+  add column if not exists confirmed_by text;
+
+alter table public.orders
+  drop constraint if exists orders_status_check;
 
 alter table public.orders enable row level security;
 

@@ -21,6 +21,7 @@ export default function ScannerPage() {
   const scanInProgressRef = useRef(false);
   const [sessionReady, setSessionReady] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
+  const [staffName, setStaffName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
@@ -37,6 +38,7 @@ export default function ScannerPage() {
   useEffect(() => {
     void supabase.auth.getSession().then(({ data }) => {
       setAuthenticated(Boolean(data.session));
+      setStaffName(data.session?.user?.email ?? "");
       setSessionReady(true);
     });
   }, []);
@@ -47,7 +49,7 @@ export default function ScannerPage() {
     setAuthError("");
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) setAuthError(error.message);
-    else setAuthenticated(true);
+    else { setAuthenticated(true); setStaffName(email); }
     setIsSigningIn(false);
   }
 
@@ -78,7 +80,7 @@ export default function ScannerPage() {
 
     const { data, error } = await supabase
       .from("orders")
-      .select("id, status")
+      .select("id, status, confirmed_by")
       .eq("reference_number", cleanReference)
       .maybeSingle();
 
@@ -99,7 +101,7 @@ export default function ScannerPage() {
       return;
     }
 
-    if (data.status !== "New") {
+    if (data.status !== "New" && data.status !== "For Confirmation") {
       setScanState("error");
       const detail = `This order is already marked as ${data.status}.`;
       setMessage(detail);
@@ -108,9 +110,18 @@ export default function ScannerPage() {
       return;
     }
 
+    if (data.confirmed_by) {
+      setScanState("error");
+      const detail = `This order was already confirmed by ${data.confirmed_by}.`;
+      setMessage(detail);
+      setStatusPopup({ title: "Already confirmed", detail, tone: "warning" });
+      scanInProgressRef.current = false;
+      return;
+    }
+
     const { error: updateError } = await supabase
       .from("orders")
-      .update({ status: "Processing", updated_at: new Date().toISOString() })
+      .update({ status: "Confirmed", confirmed_by: staffName || "Staff", updated_at: new Date().toISOString() })
       .eq("id", data.id);
 
     if (updateError) {
@@ -125,8 +136,8 @@ export default function ScannerPage() {
     }
 
     setScanState("success");
-    setMessage("Order confirmed and sent to the kitchen.");
-    setStatusPopup({ title: "Order confirmed", detail: "The order was sent to the kitchen successfully.", tone: "success" });
+    setMessage("Order confirmed. The manager dashboard will show it as confirmed.");
+    setStatusPopup({ title: "Order confirmed", detail: "The order was confirmed successfully.", tone: "success" });
     scanInProgressRef.current = false;
   }
 

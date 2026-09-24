@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { QRCodeSVG } from "qrcode.react";
 import { Soup, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../../lib/supabase";
@@ -23,12 +24,17 @@ const products: Product[] = [
   { id: "fruit", name: "Fruit of Knowledge Soda", description: "Green Apple Fruit Soda", category: "Drinks", price: 0, image: "/menu-assets/Fruit-Of-Knowledge-Soda.png" },
   { id: "kofinoy", name: "KoFinoy", description: "Cafe Filipino", category: "Drinks", price: 0, image: "/menu-assets/KoFinoy.png" },
   { id: "pankekayo", name: "Pankekayo", description: "OG Filipino Style Pancake", category: "Bread", price: 0, image: "/menu-assets/Pankekayo.png" },
-  { id: "pandasal", name: "Pandesal", description: "Classic Pandesal", category: "Bread", price: 0, image: "/menu-assets/Pandasal.png" },
+  { id: "pandasal", name: "Pandasal", description: "Classic Pandasal", category: "Bread", price: 0, image: "/menu-assets/Pandasal.png" },
 ];
 
 const peso = new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" });
 const ORDER_COOLDOWN_MS = 15000;
 let fallbackOrderSequence = 0;
+
+function PriceTag({ price }: { price: number }) {
+  if (price === 0) return <span className="free-price-inline"><del>{peso.format(price)}</del>Free</span>;
+  return <>{peso.format(price)}</>;
+}
 
 function getNow() {
   return Date.now();
@@ -94,9 +100,12 @@ export default function OrderPage() {
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [orderError, setOrderError] = useState("");
   const [basketError, setBasketError] = useState("");
-  const [order, setOrder] = useState<{ queue: string; reference: string; name: string; status: string } | null>(null);
+  const [order, setOrder] = useState<{ queue: string; reference: string; name: string; status: string; confirmedBy?: string | null } | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [showScanConfirmation, setShowScanConfirmation] = useState(false);
+  const [showNamePopup, setShowNamePopup] = useState(false);
+  const [showBarcodePopup, setShowBarcodePopup] = useState(false);
+  const [barcodeReference, setBarcodeReference] = useState<string | null>(null);
   const notifiedReference = useRef("");
   const [orderType, setOrderType] = useState<OrderType | null>(null);
 
@@ -138,15 +147,31 @@ export default function OrderPage() {
       : [item]));
   }
 
-  function proceedToOrder(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!customerName.trim() || basket.length === 0) return;
+  function proceedToReview() {
+    if (basket.length === 0) {
+      setOrderError("Add at least one item before continuing.");
+      return;
+    }
     setOrderError("");
+    setShowBasket(false);
     setConfirmOrder(true);
   }
 
+  function proceedToName() {
+    setConfirmOrder(false);
+    setShowNamePopup(true);
+  }
+
   async function placeOrder() {
-    if (!customerName.trim() || basket.length === 0) return;
+    if (basket.length === 0) {
+      setOrderError("Your basket is empty.");
+      setShowNamePopup(false);
+      return;
+    }
+    if (!customerName.trim()) {
+      setOrderError("Please enter your name before placing the order.");
+      return;
+    }
     const sessionId = getOrCreateSessionId();
 
     if (isSessionCoolingDown()) {
@@ -190,7 +215,7 @@ export default function OrderPage() {
       session_id: sessionId,
       customer_name: customerName.trim(),
       order_number: orderNumber,
-      status: "New",
+      status: "For Confirmation",
       reference_number: reference,
       order_type: orderType,
       order_source: "mobile",
@@ -205,36 +230,51 @@ export default function OrderPage() {
 
     markSessionAsOrdered();
 
-    setOrder({ queue, reference, name: customerName.trim(), status: "New" });
+    setOrder({ queue, reference, name: customerName.trim(), status: "For Confirmation" });
+    setBarcodeReference(reference);
+    setShowBarcodePopup(true);
+    setShowNamePopup(false);
     setSubmitted(true);
     setShowBasket(false);
     setConfirmOrder(false);
     setIsPlacingOrder(false);
   }
 
+  async function cancelAndEditOrder() {
+    if (barcodeReference) {
+      await supabase.from("orders").update({ status: "Cancelled", updated_at: new Date().toISOString() }).eq("reference_number", barcodeReference);
+    }
+    setShowBarcodePopup(false);
+    setSubmitted(false);
+    setOrder(null);
+    setBarcodeReference(null);
+    setShowBasket(true);
+  }
+
   useEffect(() => {
     if (!submitted || !orderReference) return;
     let active = true;
-    const applyStatus = (status?: string) => {
+    const applyStatus = (status?: string, confirmedBy?: string | null) => {
       if (!active || !status) return;
-      if (status === "Processing" && notifiedReference.current !== orderReference) {
+      if ((status === "Confirmed" || confirmedBy) && notifiedReference.current !== orderReference) {
         notifiedReference.current = orderReference;
+        setShowBarcodePopup(false);
         setShowScanConfirmation(true);
       }
-      setOrder((current) => current ? { ...current, status } : current);
+      setOrder((current) => current ? { ...current, status, confirmedBy: confirmedBy ?? current.confirmedBy } : current);
     };
 
     const channel = supabase
       .channel(`customer-order-${orderReference}`)
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "orders", filter: `reference_number=eq.${orderReference}` }, (payload) => {
-        const updated = payload.new as { status?: string };
-        applyStatus(updated.status);
+        const updated = payload.new as { status?: string; confirmed_by?: string | null };
+        applyStatus(updated.status, updated.confirmed_by);
       })
       .subscribe();
 
     const interval = window.setInterval(async () => {
-      const { data } = await supabase.from("orders").select("status").eq("reference_number", orderReference).maybeSingle();
-      applyStatus(data?.status);
+      const { data } = await supabase.from("orders").select("status, confirmed_by").eq("reference_number", orderReference).maybeSingle();
+      applyStatus(data?.status, data?.confirmed_by);
     }, 3000);
 
     return () => {
@@ -257,17 +297,34 @@ export default function OrderPage() {
             <div><span>Queue number</span><strong>{order.queue}</strong></div>
             <div><span>Reference</span><strong>{order.reference}</strong></div>
           </div>
-          <div className={`tracking-row tracking-${order.status.toLowerCase()}`}><span className="pulse-dot" /> <span>{order.status === "Completed" ? "Your order is ready! Please proceed to the counter." : order.status === "Processing" ? "Your order is being prepared." : order.status === "Cancelled" ? "This order was cancelled." : "Order received"}</span><b>{order.status.toUpperCase()}</b></div>
+          <div className={`tracking-row tracking-${order.confirmedBy && order.status === "New" ? "confirmed" : order.status.toLowerCase()}`}><span className="pulse-dot" /> <span>{order.status === "Completed" ? "Your order is ready! Please proceed to the counter." : order.status === "Processing" ? "Your order is being prepared." : order.status === "Cancelled" ? "This order was cancelled." : order.confirmedBy ? "Your order has been confirmed. Please wait to be called." : "Order received"}</span><b>{order.confirmedBy && order.status === "New" ? "CONFIRMED" : order.status.toUpperCase()}</b></div>
           <p className="counter-note">{order.status === "Completed" ? "Thanks for ordering with us!" : "Please keep this screen open and proceed to the counter when notified."}</p>
           <button className="text-button" onClick={() => { setSubmitted(false); setOrder(null); setBasket([]); setCustomerName(""); }}>Start a new order</button>
         </section>
+        {showBarcodePopup && barcodeReference && (
+          <div className="overlay barcode-overlay" onClick={() => setShowBarcodePopup(false)}>
+            <div className="barcode-modal" onClick={(event) => event.stopPropagation()}>
+              <button type="button" className="close-button" onClick={() => setShowBarcodePopup(false)} aria-label="Close">×</button>
+              <div className="barcode-kicker"><span className="scan-dot" /> Ready for scan</div>
+              <p className="eyebrow">Your order pass</p>
+              <h2>Show this code at the front desk</h2>
+              <p className="barcode-instruction">Your order stays unconfirmed until the staff scans this code.</p>
+              <div className="barcode-box" aria-label={`QR code for order ${barcodeReference}`}>
+                <QRCodeSVG value={`${window.location.origin}/scanner?reference=${encodeURIComponent(barcodeReference)}`} size={232} bgColor="#ffffff" fgColor="#172622" level="H" includeMargin={true} />
+              </div>
+              <p className="barcode-reference">{barcodeReference}</p>
+              <p className="barcode-note">Keep this screen open until the code has been scanned.</p>
+              <button type="button" className="secondary-button" onClick={() => void cancelAndEditOrder()}>Cancel and edit</button>
+            </div>
+          </div>
+        )}
         {showScanConfirmation && (
           <div className="overlay scan-confirmation-overlay">
             <section className="scan-confirmation-popup" role="dialog" aria-modal="true" aria-labelledby="scan-confirmation-title" onClick={(event) => event.stopPropagation()}>
               <div className="scan-confirmation-icon">✓</div>
               <p className="eyebrow">Order confirmed</p>
-              <h2 id="scan-confirmation-title">Please wait to be called</h2>
-              <p>The staff scanned your order. It has been sent to the kitchen and will be prepared shortly.</p>
+              <h2 id="scan-confirmation-title">Order confirmed</h2>
+              <p>The staff scanned and confirmed your order. Please wait to be called.</p>
               <button className="primary-button" onClick={() => window.location.reload()}>Complete order</button>
             </section>
           </div>
@@ -297,8 +354,8 @@ export default function OrderPage() {
             {products.filter((product) => product.category === category).map((product) => (
               <button className="product-card" key={product.id} onClick={() => setSelectedProduct(product)}>
                 <div className="product-image"><Image src={product.image} alt="" fill sizes="(max-width: 700px) 42vw, 220px" /></div>
-                <div className="product-info"><h4>{product.name}</h4><p>{product.description}</p><strong>{peso.format(product.price)}</strong></div>
-                <span className="add-icon">+</span>
+                <div className="product-info"><h4>{product.name}</h4><p>{product.description}</p></div>
+                <div className="product-card-footer"><strong>{product.price === 0 ? "Free" : peso.format(product.price)}</strong><span className="add-icon">+</span></div>
               </button>
             ))}
           </div>
@@ -321,19 +378,52 @@ export default function OrderPage() {
       </div>}
 
       <button className="basket-dock" onClick={() => setShowBasket(true)} disabled={basket.length === 0}>
-        <span>{totalItems > 0 ? `${totalItems} ${totalItems === 1 ? "item" : "items"} in your basket` : "Your basket is empty"}</span><strong>{totalItems > 0 ? "Review basket" : "Choose an item"} <b>→</b></strong>
+        <span className="basket-dock-info">
+          <strong>{totalItems > 0 ? `${totalItems} ${totalItems === 1 ? "item" : "items"}` : "Basket empty"}</strong>
+          <span><PriceTag price={total} /></span>
+        </span>
+        <span className="basket-dock-cta">Proceed <b>→</b></span>
       </button>
 
       {showBasket && <div className="overlay" onClick={() => setShowBasket(false)}>
         <aside className="basket-drawer" onClick={(event) => event.stopPropagation()}>
-          <div className="drawer-heading"><div><p className="eyebrow">Your selection</p><h2>{confirmOrder ? "Confirm order" : "Your basket"}</h2></div><button className="close-button" onClick={() => setShowBasket(false)} aria-label="Close basket">×</button></div>
+          <div className="drawer-heading"><div><p className="eyebrow">Order summary</p><h2>Your basket</h2></div><button className="close-button" onClick={() => setShowBasket(false)} aria-label="Close basket">×</button></div>
           {basket.length === 0 ? <p className="empty-basket">Your basket is waiting for something delicious.</p> : <>
-            <div className="basket-list">{basket.map((item) => <div className="basket-item" key={item.id}><div><h4>{item.name}</h4><p>{peso.format(item.price)} each</p></div><div className="mini-quantity"><button onClick={() => changeQuantity(item.id, -1)} aria-label={`Remove one ${item.name}`}>−</button><b>{item.quantity}</b><button onClick={() => changeQuantity(item.id, 1)} aria-label={`Add one ${item.name}`}>+</button></div></div>)}</div>
-            <div className="basket-total"><span>Total</span><strong>{peso.format(total)}</strong></div>
+            <div className="basket-list">{basket.map((item) => <div className="basket-item" key={item.id}><div className="basket-item-main"><div className="basket-item-thumb"><Image src={item.image} alt={item.name} fill sizes="52px" /></div><div><h4>{item.name}</h4><p><PriceTag price={item.price} /> each</p></div></div><div className="mini-quantity"><button onClick={() => changeQuantity(item.id, -1)} aria-label={`Remove one ${item.name}`}>−</button><b>{item.quantity}</b><button onClick={() => changeQuantity(item.id, 1)} aria-label={`Add one ${item.name}`}>+</button></div></div>)}</div>
+            <div className="basket-total"><span>Total</span><strong><PriceTag price={total} /></strong></div>
             {basketError && <p className="order-error" role="alert">{basketError}</p>}
-            {confirmOrder ? <div className="confirmation"><p>Ready to place this order for <strong>{customerName}</strong>?</p><p className="confirmation-note">Your order will be sent to the counter and cannot be edited afterward.</p>{orderError && <p className="order-error">{orderError}</p>}<button className="primary-button" onClick={placeOrder} disabled={isPlacingOrder}>{isPlacingOrder ? "Saving order..." : "Confirm and place order"}</button><button className="cancel-button" onClick={() => setConfirmOrder(false)}>Back to basket</button></div> : <form onSubmit={proceedToOrder}><div className="customer-name-field"><label htmlFor="customer-name">Customer name</label><p>Use the name the cashier will call.</p><input id="customer-name" value={customerName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Enter your name" autoComplete="name" required /></div><button className="primary-button" type="submit">Proceed to order</button></form>}
+            {orderError && <p className="order-error" role="alert">{orderError}</p>}
+            <button className="primary-button" onClick={proceedToReview} disabled={basket.length === 0}>Place order</button>
           </>}
         </aside>
+      </div>}
+
+      {confirmOrder && <div className="overlay" onClick={() => setConfirmOrder(false)}>
+        <div className="basket-drawer confirmation-drawer" onClick={(event) => event.stopPropagation()}>
+          <div className="drawer-heading"><div><p className="eyebrow">Review order</p><h2>Confirm purchase</h2></div></div>
+          <p className="confirmation-note">Please review your items before continuing.</p>
+          <div className="basket-list">{basket.map((item) => <div className="basket-item" key={item.id}><div className="basket-item-main"><div className="basket-item-thumb"><Image src={item.image} alt={item.name} fill sizes="52px" /></div><div><h4>{item.name}</h4><p>{item.quantity} item{item.quantity > 1 ? "s" : ""}</p></div></div><strong>{item.price === 0 ? "Free" : peso.format(item.price * item.quantity)}</strong></div>)}</div>
+          <div className="confirmation-footer">
+            <div className="basket-total"><span>Total</span><strong><PriceTag price={total} /></strong></div>
+            <div className="button-row">
+              <button className="secondary-button" onClick={() => { setConfirmOrder(false); setShowBasket(true); }}>Go back and edit</button>
+              <button className="primary-button" onClick={proceedToName}>Continue</button>
+            </div>
+          </div>
+        </div>
+      </div>}
+
+      {showNamePopup && <div className="overlay" onClick={() => setShowNamePopup(false)}>
+        <div className="basket-drawer confirmation-drawer" onClick={(event) => event.stopPropagation()}>
+          <div className="drawer-heading"><div><p className="eyebrow">Almost done</p></div><button className="close-button" onClick={() => setShowNamePopup(false)} aria-label="Close">×</button></div>
+          <div className="customer-name-field">
+            <label htmlFor="customer-name">What is your name</label>
+            <p>This name will be used to call you when your order is ready.</p>
+            <input id="customer-name" value={customerName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Enter your name" autoComplete="name" required />
+          </div>
+          {orderError && <p className="order-error" role="alert">{orderError}</p>}
+          <button className="primary-button" onClick={() => void placeOrder()} disabled={isPlacingOrder || !customerName.trim()}>{isPlacingOrder ? "Placing order..." : "Place order"}</button>
+        </div>
       </div>}
     </main>
   );
