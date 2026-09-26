@@ -62,12 +62,12 @@ const products: Product[] = [
     image: "/menu-assets/KoFinoy.png",
   },
   {
-    id: "pankekayo",
-    name: "Pankekayo",
-    description: "OG Filipino Style Pancake. Okeh kaayoh!",
+    id: "Cupkekayo",
+    name: "Cupkekayo",
+    description: "OG Filipino Style cupcake. Okeh kaayoh!",
     category: "Bread",
     price: 0,
-    image: "/menu-assets/Pankekayo.png",
+    image: "/menu-assets/Cupkekayo.png",
   },
   {
     id: "pandasal",

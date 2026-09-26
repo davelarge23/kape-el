@@ -24,7 +24,7 @@ const products: Product[] = [
   { id: "permika", name: "Permika Latte", description: "Spanish Latte with a splash of time", category: "Drinks", price: 0, image: "/menu-assets/Permika-Latte.png" },
   { id: "fruit", name: "Fruit of the Spirit Soda", description: "Fruitfully Spirit-filled Mixed Berries Soda", category: "Drinks", price: 0, image: "/menu-assets/mixed-berries.png" },
   { id: "kofinoy", name: "KoFinoy", description: "Kapeng Barako para sa kapatid ko kay Kristo", category: "Drinks", price: 0, image: "/menu-assets/KoFinoy.png" },
-  { id: "pankekayo", name: "Pankekayo", description: "OG Filipino Style Pancake. Okeh kaayoh!", category: "Bread", price: 0, image: "/menu-assets/Pankekayo.png" },
+  { id: "Cupkekayo", name: "Cupkekayo", description: "OG Filipino Style cupcake. Okeh kaayoh!", category: "Bread", price: 0, image: "/menu-assets/Cupkekayo.png" },
   { id: "pandasal", name: "Pandasal", description: "Classic Pandesal with prayers of blessings", category: "Bread", price: 0, image: "/menu-assets/Pandasal.png" },
 ];
 
