@@ -22,7 +22,7 @@ type OrderType = "individual" | "group";
 const products: Product[] = [
   { id: "dalina", name: "Dalina Coffee", description: "Dalgona Coffee in a rush", category: "Drinks", price: 0, image: "/menu-assets/Dalina-Coffee.png" },
   { id: "permika", name: "Permika Latte", description: "Spanish Latte with a splash of time", category: "Drinks", price: 0, image: "/menu-assets/Permika-Latte.png" },
-  { id: "fruit", name: "Fruit of Knowledge Soda", description: "Knowledge-glazed Green Apple-flavored Fruit Soda", category: "Drinks", price: 0, image: "/menu-assets/Fruit-Of-Knowledge-Soda.png" },
+  { id: "fruit", name: "Fruit of the Spirit Soda", description: "Fruitfully Spirit-filled Mixed Berries Soda", category: "Drinks", price: 0, image: "/menu-assets/mixed-berries.png" },
   { id: "kofinoy", name: "KoFinoy", description: "Kapeng Barako para sa kapatid ko kay Kristo", category: "Drinks", price: 0, image: "/menu-assets/KoFinoy.png" },
   { id: "pankekayo", name: "Pankekayo", description: "OG Filipino Style Pancake. Okeh kaayoh!", category: "Bread", price: 0, image: "/menu-assets/Pankekayo.png" },
   { id: "pandasal", name: "Pandasal", description: "Classic Pandesal with prayers of blessings", category: "Bread", price: 0, image: "/menu-assets/Pandasal.png" },

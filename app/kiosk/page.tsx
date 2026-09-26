@@ -47,11 +47,11 @@ const products: Product[] = [
   },
   {
     id: "fruit",
-    name: "Fruit of Knowledge Soda",
-    description: "Knowledge-glazed Green Apple-flavored Fruit Soda",
+    name: "Fruit of the Spirit Soda",
+    description: "Fruitfully Spirit-filled Mixed Berries Soda",
     category: "Drinks",
     price: 0,
-    image: "/menu-assets/Fruit-Of-Knowledge-Soda.png",
+    image: "/menu-assets/mixed-berries.png",
   },
   {
     id: "kofinoy",
